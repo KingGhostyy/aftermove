@@ -35,3 +35,14 @@ test('ready suggestions render using actual SAN text with hints on or off',async
  context.renderVariation();assert.equal(suggested,null);assert.match(view.innerHTML,/Next engine move ready/);
  v.showSuggestion=true;context.renderVariation();assert.equal(suggested.from,'e2');assert.equal(suggested.to,'e4');assert.match(view.innerHTML,/Suggestion: e4/);
 });
+
+test('returning to original game cancels pending work and preserves the selected game move',()=>{
+ const {v,r,timers,context}=setup();let cancelled=0,rendered=0,stopped=0;
+ r.index=4;r.position={ply:9,fen:'selected original position'};
+ v.analysis={cancel(){cancelled++;}};
+ context.renderReview=()=>rendered++;context.stopEvaluation=()=>stopped++;
+ context.scheduleVariation(v);assert.equal(timers.size,1);
+ context.returnToOriginalGame();
+ assert.equal(r.variation,null);assert.equal(r.index,4);assert.equal(r.position.ply,9);
+ assert.equal(timers.size,0);assert.equal(cancelled,1);assert.equal(stopped,1);assert.equal(rendered,1);
+});
