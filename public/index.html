@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#182c27"><title>Aftermove · Your personal chess coach</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23182c27'/%3E%3Ctext x='8' y='50' font-size='50' fill='%23d3e9b0'%3E♞%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"chess.js":"/vendor/chess.js"}}</script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Aftermove home"><span class="brand-icon">♞</span> aftermove<span class="brand-dot">.</span></a>
+    <div class="sidebar-label">YOUR CHESS, UNDERSTOOD</div>
+    <nav aria-label="Main navigation">
+      <button data-view="overview" class="nav active"><span>◫</span> Overview</button>
+      <button data-view="games" class="nav"><span>▤</span> Your games <small id="game-count">0</small></button>
+      <button data-view="practice" class="nav"><span>♘</span> Practice <small id="practice-count">0</small></button>
+      <button data-view="progress" class="nav"><span>↗</span> Progress</button>
+    </nav>
+    <div class="side-note"><span class="online-dot"></span> Your personal chess space<p>Runs on your computer.<br>No account. No subscriptions.</p></div>
+    <div class="sidebar-bottom"><div class="avatar">♙</div><div><strong id="sidebar-user">Your next move</strong><span>Local workspace</span></div></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div>WORKSPACE <span>/</span> <strong id="breadcrumb">Overview</strong></div><span class="privacy"><span class="online-dot"></span> Private · on this computer</span></header>
+    <main>
+      <section class="page-heading"><div><div class="eyebrow">A LITTLE REFLECTION. A BETTER NEXT GAME.</div><h1 id="page-title">Every game has a lesson.</h1><p id="page-subtitle">Find yours. Turn your recent games into a clear path forward.</p></div><span class="edition">PERSONAL COACH <b>01</b></span></section>
+      <section id="import-panel" class="import-panel">
+        <div><h2>Start with your games</h2><p>Load your recent Chess.com games, then choose exactly which ones to analyze.</p></div>
+        <form id="import-form"><div class="field"><label for="username">Chess.com username</label><input id="username" name="username" autocomplete="off" placeholder="Enter your username" pattern="[a-zA-Z0-9_-]{2,50}" required maxlength="50"></div><button class="primary" id="load-games" type="submit">Load recent games <span>↗</span></button></form>
+      </section>
+      <section id="game-picker" class="panel game-picker" hidden></section>
+      <section id="job-panel" class="job-panel" hidden><div><strong id="job-title">Getting your games…</strong><button id="stop" class="text-button">Stop analysis</button></div><progress id="job-progress" aria-labelledby="job-title" max="100" value="0"></progress><p id="job-detail">Completed games are saved automatically.</p></section>
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <div id="view"></div>
+      <footer><span>Made for the moves that come next.</span><span>Independent app · Not affiliated with Chess.com · <a href="/licenses/stockfish" target="_blank" rel="noopener">Stockfish GPLv3</a> · <a href="https://github.com/nmrugg/stockfish.js/tree/v19.0.1" target="_blank" rel="noopener">Engine source</a></span></footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "chess-account-coach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs", "test": "node --test" },
+  "dependencies": { "chess.js": "1.4.0", "stockfish": "19.0.1" }
+}

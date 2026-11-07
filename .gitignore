@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+artifacts/
+.env
+.env.*
+sites/aftermove/.openai/
+sites/aftermove/dist/
+*.tar.gz

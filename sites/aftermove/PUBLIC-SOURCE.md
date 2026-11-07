@@ -1,0 +1,1 @@
+This is a sanitized source export. Private Sites project identifiers and hosting credentials are intentionally excluded. Local npm start and npm test work without Sites. To host your own copy, configure your own .openai/hosting.json project identity before using the Sites build scripts.
