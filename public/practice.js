@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import {moveInsight} from './insights.js';
 
 const names={p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'};
 export function linePositions(fen,line=[]){
@@ -49,10 +50,11 @@ export function explainMove(fen,line=[]){
     }catch{break;}
   }
   if(!positionalDetail&&!first.captured&&!first.promotion&&!first.san.includes('+')&&reply&&!reply.captured)parts.push('Step through the line to compare how the pieces coordinate; this short search does not establish a specific tactical motif.');
-  return parts.join(' ');
+  const insight=moveInsight(fen,line);
+  return insight?insight.text+' '+parts.filter(part=>/engine’s reply|then captures|Following this|now controls/.test(part)).join(' '):parts.join(' ');
 }
 
-export function attachArrows(board,orientation,model,suggestion=null){
+export function attachArrows(board,orientation,model,suggestion=null,ideas=[]){
   model.arrows??=[];
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox','0 0 8 8');svg.setAttribute('aria-hidden','true');svg.classList.add('arrow-overlay');board.append(svg);
@@ -64,9 +66,9 @@ export function attachArrows(board,orientation,model,suggestion=null){
   };
   const draw=()=>{
     svg.replaceChildren();
-    const arrows=[...(suggestion?[{...suggestion,suggested:true}]:[]),...model.arrows,...(start&&end?[{from:start,to:end}]:[])];
+    const arrows=[...ideas.map(arrow=>({...arrow,idea:true})),...(suggestion?[{...suggestion,suggested:true}]:[]),...model.arrows,...(start&&end?[{from:start,to:end}]:[])];
     for(const arrow of arrows){
-      const color=arrow.suggested?'#285e50':'#df9838';
+      const color=arrow.idea?(arrow.tone==='risk'?'#a36352':'#55774c'):arrow.suggested?'#285e50':'#df9838';
       const [x1,y1]=squarePoint(arrow.from,orientation),[x2,y2]=squarePoint(arrow.to,orientation);
       if(arrow.from===arrow.to){const c=document.createElementNS(svg.namespaceURI,'circle');c.setAttribute('cx',x1);c.setAttribute('cy',y1);c.setAttribute('r','.39');c.setAttribute('fill','none');c.setAttribute('stroke','#df9838');c.setAttribute('stroke-width','.12');svg.append(c);continue;}
       const angle=Math.atan2(y2-y1,x2-x1),dx=Math.cos(angle),dy=Math.sin(angle),baseX=x2-dx*.4,baseY=y2-dy*.4;
@@ -74,14 +76,16 @@ export function attachArrows(board,orientation,model,suggestion=null){
       const head=document.createElementNS(svg.namespaceURI,'polygon');head.setAttribute('points',`${x2},${y2} ${baseX-dy*.24},${baseY+dx*.24} ${baseX+dy*.24},${baseY-dx*.24}`);head.setAttribute('fill',color);if(arrow.suggested){line.classList.add('engine-suggestion');head.classList.add('engine-suggestion');}svg.append(head);
     }
   };
+  const dismissIdeas=()=>{if(!ideas.length)return;ideas=[];model.showIdeas=false;clear.onIdeasCleared?.();};
   board.addEventListener('contextmenu',e=>e.preventDefault());
-  board.addEventListener('pointerdown',e=>{if(e.button===0){model.arrows=[];start=end=pointer=null;draw();return;}if(e.button!==2)return;e.preventDefault();start=squareAt(e);end=start;pointer=e.pointerId;board.setPointerCapture(pointer);draw();});
+  board.addEventListener('pointerdown',e=>{if(e.button===0){dismissIdeas();model.arrows=[];start=end=pointer=null;draw();return;}if(e.button!==2)return;e.preventDefault();start=squareAt(e);end=start;pointer=e.pointerId;board.setPointerCapture(pointer);draw();});
   board.addEventListener('pointermove',e=>{if(start){end=squareAt(e);draw();}});
   board.addEventListener('pointerup',e=>{if(e.pointerId!==pointer)return;e.preventDefault();const to=squareAt(e);if(start&&to)model.arrows=toggleArrow(model.arrows,start,to);start=end=pointer=null;draw();});
   board.addEventListener('pointercancel',()=>{start=end=pointer=null;draw();});
   draw();
-  const clear=()=>{model.arrows=[];draw();};
+  const clear=()=>{dismissIdeas();model.arrows=[];draw();};
   clear.setSuggestion=value=>{suggestion=value;draw();};
+  clear.setIdeas=value=>{ideas=value;draw();};
   return clear;
 }
 

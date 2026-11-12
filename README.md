@@ -83,3 +83,7 @@ Imports write only after reaching the requested counts. `--append` keeps all exi
 ## Compare a played move with the engine
 
 In game review, select either player’s move and choose **Show best instead** beside the move list. The app rewinds that selected move and plays the engine suggestion in a separate variation. Use **Return to original game** to return to the selected move. If the engine chooses the original move, the comparison says it was already preferred. The saved game is never edited. **Play engine move** remains available for the position currently on the board.
+
+## Board explanations
+
+Game review, variations, and played practice moves show a short board-based explanation beside the board: checks, forks, undefended pieces, captures, development, castling, and promotions. Sage arrows show the move or attacking targets; muted red arrows show a legal capture against an undefended piece. Use Show idea arrows to hide them; left-click or Clear arrows dismisses them too. Initial practice positions reveal no explanation or answer arrows. These are observable board facts, not a complete strategic diagnosis or a claim that every sacrifice is bad.

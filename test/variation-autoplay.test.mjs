@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {Chess} from 'chess.js';
+import {playedMoveInsight} from '../public/insights.js';
 import {variationBoard} from '../public/variation-engine.js';
 const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
-const code=app.slice(app.indexOf('function cancelVariation(){'),app.indexOf('function renderPractice(){'));
+const code=app.slice(app.indexOf('function coachingMarkup('),app.indexOf('function renderPractice(){'));
 function setup(){
  const v={positions:[{fen:new Chess().fen(),san:'Start'}],cursor:0,autoBoth:true,auto:false,busy:false},r={variation:v},timers=new Map();let id=0;
- const context={state:{review:r,running:false},variationBoard,Chess,stopEvaluation(){},clearTimeout:id=>timers.delete(id),setTimeout:callback=>{timers.set(++id,callback);return id;},renderReview:()=>context.scheduleVariation(v)};
+ const context={state:{review:r,running:false},playedMoveInsight,variationBoard,Chess,stopEvaluation(){},clearTimeout:id=>timers.delete(id),setTimeout:callback=>{timers.set(++id,callback);return id;},renderReview:()=>context.scheduleVariation(v)};
  vm.runInNewContext(code,context);return {v,r,timers,context};
 }
 test('both-side autoplay makes consecutive White and Black moves and stops immediately on cancel',async()=>{
