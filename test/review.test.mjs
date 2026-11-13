@@ -34,3 +34,15 @@ test('best-instead starts before the selected move for either side, including th
   reviewAlternativeSource(game,1);
   assert.equal(JSON.stringify(game),original);
 });
+
+test('exploration move list includes original history and the new line with correct move numbers',async()=>{
+ const {explorationMoves}=await import('../public/review.js');
+ const {linePositions}=await import('../public/practice.js');
+ const game=parseGame(raw,'White'),fen=game.history[2].afterFen,positions=linePositions(fen,['g8f6','f1c4']);
+ const moves=explorationMoves(game,positions);
+ assert.deepEqual(moves.map(m=>m.san),['e4','e5','Nf3','Nf6','Bc4']);
+ assert.deepEqual(moves.slice(3).map(m=>[m.color,m.moveNumber,m.index]),[['b',2,1],['w',3,2]]);
+ assert.equal(moves[2].source,'game');assert.equal(moves[3].source,'variation');
+ assert.equal(explorationMoves(game,linePositions(game.history[3].afterFen,[])).length,4);
+ assert.equal(explorationMoves(game,linePositions(game.history[0].fen,[])).length,0);
+});

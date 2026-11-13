@@ -38,3 +38,11 @@ test('historical comparisons fill the original move reply only for the matching 
  assert.equal(v.positions[v.cursor+1].san,'bxa6');
  assert.equal(context.completeComparisonLine(v,fen,{pv:['b7a6']}),false);
 });
+
+test('idea arrows can be turned off before the first exploration move',()=>{
+ const {context,v}=setup(),attributes={},toggle={setAttribute:(name,value)=>attributes[name]=value,querySelector:()=>null};let ideas;
+ context.$=selector=>selector==='#variation-ideas'?toggle:null;
+ context.bindCoaching(v,null,{setIdeas:value=>ideas=value});toggle.onclick();
+ assert.equal(v.showIdeas,false);assert.deepEqual(Array.from(ideas),[]);assert.equal(attributes['aria-pressed'],'false');
+ toggle.onclick();assert.equal(v.showIdeas,true);assert.deepEqual(Array.from(ideas),[]);
+});

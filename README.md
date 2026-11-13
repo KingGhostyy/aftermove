@@ -93,3 +93,7 @@ Game review, variations, and played practice moves show a short board-based expl
 After a checked practice or exploration move, the comparison cards keep **Your move** and **Best move** available from the same starting position. Selecting a card updates the board, explanation, and arrows; the navigation arrows step through that branch's engine reply. Switching cards pauses autoplay and does not count as solving a practice puzzle. Show best instead in historical review also retains the played move for comparison, including an opponent's move. Engine settings and idea arrows use rounded On/Off buttons.
 
 Press **Space** in game review or move exploration to play the next engine move without scrolling. Holding Space does not queue extra moves; typing in fields keeps normal Space behavior. The shortcut is shown on the Play engine move buttons. Legal capture targets use the same green dots as empty destinations, above the piece artwork.
+
+## Compact exploration workspace
+
+Exploration uses a compact board and move list with an always-visible bottom control bar, including Idea arrows at the starting position. The list includes the original game up to the branch point and the exploration line, with correct White/Black move numbers. Click an exploration move to step through the branch; click a muted original move to return to that point in game review. Move history and longer comparison notes scroll inside their panel so the board navigation and controls stay visible on desktop. Verified at 1280×720 and 1098×720 with no page overflow.

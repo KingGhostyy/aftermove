@@ -6,7 +6,7 @@ import { PUZZLES, THEMES, freshExercises, weaknessProfile, readPuzzleHistory, ma
 import { gameChoices, selectedGames } from './game-picker.js';
 import { captureReviewScroll, restoreReviewScroll } from './scroll.js';
 import { persistWorkspace, SAVE_WARNING } from './storage.js';
-import { reviewMoves, reviewSelection, reviewMoveQuality, reviewAlternativeSource } from './review.js';
+import { reviewMoves, reviewSelection, reviewMoveQuality, reviewAlternativeSource, explorationMoves } from './review.js';
 import { Chess } from 'chess.js';
 import { Engine, requireEvaluation } from './engine.js';
 import { searchingEval } from './eval.js';
@@ -117,6 +117,7 @@ function bindPracticeModes(){
 }
 
 function render(){
+  document.body.classList.remove('exploring');
   const titles={overview:state.games.length?'A clearer picture of your chess.':'Every game has a lesson.',games:'Look back. See more.',practice:'A second chance at the right move.',progress:'Your chess, over time.'};
   const subtitles={overview:state.games.length?`A few lessons from ${state.games.length} ${state.games.length===1?'game':'games'} by ${state.username}.`: 'Find yours. Turn your recent games into a clear path forward.',games:'Follow your decisions and uncover the moments that changed the game.',practice:'Fresh training positions and real moments from your games.',progress:'Look for a direction across all your saved games.'};
   $('#page-title').textContent=titles[state.view];$('#page-subtitle').textContent=subtitles[state.view];$('#breadcrumb').textContent=state.view==='games'?'Your games':state.view[0].toUpperCase()+state.view.slice(1);
@@ -244,6 +245,7 @@ function reviewThinkingPanel(game){
   return `<section class="review-thinking"><div><h3>Your longest thinks</h3><p>Jump to the moves you spent the most time on.</p>${links(timing.longest)}</div><div class="thinking-mistakes"><h3>Long thinks, costly moves</h3><p>15+ seconds, at least twice your typical move time, and a mistake or blunder.</p>${timing.mistakes.length?links(timing.mistakes.slice(0,3)):'<p>No moves meet this threshold in this game.</p>'}</div></section>`;
 }
 function renderReview(){
+  document.body.classList.toggle('exploring',!!state.review?.variation);
   if(state.review.variation){renderedReview=null;renderVariation();return;}
   const page=document.scrollingElement||document.documentElement,previousList=renderedReview===state.review?$('.review-move-scroll'):null;
   const scroll=previousList?captureReviewScroll(page,previousList):null,previouslySelected=previousList?.querySelector('[aria-current="step"]')?.dataset.reviewPly;renderedReview=state.review;
@@ -291,6 +293,12 @@ function renderReview(){
 function optionButton(id,label,on,disabled=false){
  return `<button type="button" class="option-toggle" id="${id}" aria-pressed="${!!on}" ${disabled?'disabled':''}><span>${label}</span><span class="toggle-state" aria-hidden="true">${on?'On':'Off'}</span></button>`;
 }
+function explorationMovePanel(game,v){
+ const moves=explorationMoves(game,v.positions),lastOriginal=moves.findLast(move=>move.source==='game'),rows=new Map();
+ for(const move of moves){if(!rows.has(move.moveNumber))rows.set(move.moveNumber,{});rows.get(move.moveNumber)[move.color]=move;}
+ const cell=move=>{if(!move)return '<span></span>';const local=move.source==='variation',current=local?move.index===v.cursor:v.cursor===0&&move===lastOriginal;return `<button class="${local?'line-move':'game-prefix'}" ${local?'data-variation-ply="'+move.index+'"':'data-origin-ply="'+move.ply+'"'} aria-current="${current?'step':'false'}" title="${local?'Explore this move':'View in original game'}">${escape(move.san)}${Number.isFinite(move.thinkSeconds)?`<small>${move.thinkSeconds.toFixed(1)}s</small>`:''}</button>`;};
+ return `<section class="exploration-moves" aria-label="Exploration move list"><div class="exploration-moves-title"><h3>Moves</h3><button class="text-button" data-variation-ply="0">Line start</button></div><div class="exploration-moves-head"><span>#</span><span>White</span><span>Black</span></div><div class="exploration-move-scroll">${[...rows].map(([number,row])=>`<div class="exploration-move-row"><small>${number}.</small>${cell(row.w)}${cell(row.b)}</div>`).join('')||'<p>Make a move to start your line.</p>'}</div><p class="exploration-moves-caption">Muted moves: original game · Green: your line</p></section>`;
+}
 function paintOption(button,on){
  if(!button)return;button.setAttribute('aria-pressed',String(!!on));const badge=button.querySelector('.toggle-state');if(badge)badge.textContent=on?'On':'Off';
 }
@@ -316,13 +324,13 @@ function completeComparisonLine(v,fen,result){
  if(move.after!==fen||v.cursor!==c.prefix.length)return false;
  c.playedLine=[c.played,...result.pv];v.positions=comparisonPositions(c,'your');return true;
 }
-function coachingMarkup(idea,model){
+function coachingMarkup(idea,model,inlineToggle=true){
  if(!idea)return '';
- return `<section class="board-coaching ${idea.tone==='risk'?'board-risk':''}" aria-label="Move explanation"><div><strong>${idea.tone==='risk'?'Watch the reply':'The idea'}</strong>${optionButton('why-arrows','Idea arrows',model.showIdeas!==false)}</div><p>${escape(idea.text)}</p></section>`;
+ return `<section class="board-coaching ${idea.tone==='risk'?'board-risk':''}" aria-label="Move explanation"><div><strong>${idea.tone==='risk'?'Watch the reply':'The idea'}</strong>${inlineToggle?optionButton('why-arrows','Idea arrows',model.showIdeas!==false):''}</div><p>${escape(idea.text)}</p></section>`;
 }
 function bindCoaching(model,idea,annotations){
- const toggle=$('#why-arrows');if(toggle&&idea){
-  toggle.onclick=()=>{model.showIdeas=model.showIdeas===false;annotations.setIdeas(model.showIdeas?idea.arrows:[]);paintOption(toggle,model.showIdeas);};
+ const toggle=$('#why-arrows')||$('#variation-ideas');if(toggle){
+  toggle.onclick=()=>{model.showIdeas=model.showIdeas===false;annotations.setIdeas(model.showIdeas?idea?.arrows||[]:[]);paintOption(toggle,model.showIdeas);};
   annotations.onIdeasCleared=()=>paintOption(toggle,false);
  }
 }
@@ -341,6 +349,7 @@ function variationCorrectionMarkup(v){
 function paintVariationCorrection(r,v){
  if(state.review!==r||r.variation!==v)return;
  const slot=$('.variation-correction');if(!slot)return;slot.innerHTML=variationCorrectionMarkup(v);
+ const details=$('#exploration-comparison');if(details){details.hidden=!(v.comparison||v.correction||v.checkingMove);details.open=v.comparisonOpen!==false;}
  $('#variation-best')?.addEventListener('click',()=>applyVariationBest());bindComparison('variation');
 }
 async function reviewVariationMove(r,v,attempt){
@@ -400,7 +409,8 @@ function renderVariation(){
   const suggestion=analysis.peek(shown.fen),ready=!!suggestion?.best,interactive=!v.busy&&!v.autoBoth&&!ended;
   const suggestionText=ready?sanLine(shown.fen,[suggestion.best]):'';
   const coaching=playedMoveInsight(v.positions,v.cursor);
-  $('#view').innerHTML=`<div class="section-title"><button class="text-button" id="return-game">← Return to original game</button><span class="pill">Your variation</span></div><div class="practice-layout"><div class="board-shell"><div class="board-meta"><strong>${board.turn()==='w'?'White':'Black'} to move</strong><small>Exploring move ${v.replacedMove?.moveNumber??r.game.moves[r.index].moveNumber}</small></div>${evalBoard(boardMarkup(shown.fen,r.game.color,interactive,v.selected,targets,shown.last),r.game.color)}${coachingMarkup(coaching,v)}<div class="line-controls"><button class="secondary" id="variation-back" aria-label="Previous variation move" ${v.cursor===0?'disabled':''}>←</button><span class="variation-navigation-title">${escape(shown.san)}<small>Step ${v.cursor} · ← / → keys</small><button class="variation-return" id="variation-return" aria-label="Back to original game">Back to original game</button></span><button class="secondary" id="variation-forward" aria-label="Next variation move" ${v.cursor===v.positions.length-1?'disabled':''}>→</button></div><div class="move-chips" aria-label="Your variation moves">${v.positions.map((p,i)=>`<button class="move-chip ${i===v.cursor?'current':''}" data-variation-ply="${i}">${escape(p.san)}</button>`).join('')}</div></div><section class="practice-card"><span class="tag">TRY YOUR IDEA</span><h2>${v.replacedMove?'The best move instead':'What if you played differently?'}</h2>${v.replacedMove?`<p class="replacement-context">Alternative to ${v.replacedMove.color==='w'?'White':'Black'}’s ${v.replacedMove.moveNumber}. ${escape(v.replacedMove.san)}. Your original game is unchanged.${(v.comparison?.best??v.positions[1]?.uci)===v.replacedMove.from+v.replacedMove.to+(v.replacedMove.promotion||'')?' This was already the engine’s preferred move.':''}</p>`:''}<p>Drag a piece or click its destination. You can play either side. Going back and playing a new move starts a new line from there.</p><div class="variation-correction">${variationCorrectionMarkup(v)}</div><div class="variation-options">${optionButton('variation-suggestion','Show engine suggestion',v.showSuggestion)}${optionButton('variation-auto','Automatic engine replies',v.auto,v.autoBoth)}${optionButton('variation-both','Play both sides',v.autoBoth,ended||state.running)}</div><div class="practice-actions"><button class="secondary" id="variation-engine" aria-keyshortcuts="Space" title="Play engine move (Space)" ${v.busy||v.autoBoth||ended||state.running?'disabled':''}>${v.busy?'Engine thinking…':'Play engine move <kbd aria-hidden="true">Space</kbd>'}</button><button class="text-button" id="variation-reset">Reset variation</button></div><p class="variation-status" role="status">${ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):escape(v.message||(ready?(v.showSuggestion?'Suggestion: '+suggestionText:'Next engine move ready.'):'Calculating next best move…'))}${v.autoBoth&&!ended?' Autoplay is on. Press Play both sides to stop.':''}</p><p class="sample-note">The evaluation bar follows your variation. Navigation pauses autoplay. Return to the original game whenever you’re ready.</p></section></div>`;
+  const previousList=$('.exploration-move-scroll'),listTop=previousList?.scrollTop||0;
+  $('#view').innerHTML=`<div class="section-title exploration-heading"><button class="text-button" id="return-game">Back to original game</button><span>Explore · move ${v.replacedMove?.moveNumber??r.game.moves[r.index].moveNumber}</span></div><div class="exploration-layout"><div class="board-shell exploration-board"><div class="board-meta"><strong>${board.turn()==='w'?'White':'Black'} to move</strong><small>${v.replacedMove?'Best-move comparison':'Try your idea'}</small></div>${evalBoard(boardMarkup(shown.fen,r.game.color,interactive,v.selected,targets,shown.last),r.game.color)}<div class="line-controls"><button class="secondary" id="variation-back" aria-label="Previous variation move" ${v.cursor===0?'disabled':''}>←</button><span class="variation-navigation-title">${escape(shown.san)}<small>Step ${v.cursor}</small><button class="variation-return" id="variation-return" aria-label="Back to original game">Back to original game</button></span><button class="secondary" id="variation-forward" aria-label="Next variation move" ${v.cursor===v.positions.length-1?'disabled':''}>→</button></div></div><aside class="exploration-side">${explorationMovePanel(r.game,v)}${coachingMarkup(coaching,v,false)}<details id="exploration-comparison" class="exploration-comparison" ${v.comparison||v.correction||v.checkingMove?'':'hidden'} ${v.comparisonOpen===false?'':'open'}><summary>Compare moves</summary><div class="variation-correction">${variationCorrectionMarkup(v)}</div></details><p class="variation-status" role="status">${ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):escape(v.message||(ready?(v.showSuggestion?'Suggestion: '+suggestionText:'Next engine move ready.'):'Calculating next best move…'))}${v.autoBoth&&!ended?' Play both sides is on.':''}</p></aside></div><div class="exploration-toolbar" aria-label="Exploration controls">${optionButton('variation-ideas','Idea arrows',v.showIdeas!==false)}${optionButton('variation-suggestion','Engine suggestion',v.showSuggestion)}${optionButton('variation-auto','Auto replies',v.auto,v.autoBoth)}${optionButton('variation-both','Play both sides',v.autoBoth,ended||state.running)}<button class="secondary" id="variation-engine" aria-keyshortcuts="Space" title="Play engine move (Space)" ${v.busy||v.autoBoth||ended||state.running?'disabled':''}>${v.busy?'Thinking…':'Play engine move <kbd aria-hidden="true">Space</kbd>'}</button><button class="secondary" id="variation-reset">Reset line</button></div>`;
   const annotations=attachArrows($('#view .board'),r.game.color,v,v.showSuggestion&&ready&&!ended?{from:suggestion.best.slice(0,2),to:suggestion.best.slice(2,4)}:null,v.showIdeas===false?[]:coaching?.arrows||[]);v.suggestArrow=annotations.setSuggestion;bindCoaching(v,coaching,annotations);
   paintEval(suggestion?.score??evalCache.get(shown.fen));if(analysis.failure?.fen===shown.fen)paintEvalUnavailable();
   attachPieceDrag($('#view .board'),r.game.color,square=>interactive&&board.get(square)?.color===board.turn(),(from,to)=>{v.selected=from;playVariation(to);},from=>board.moves({square:from,verbose:true}).map(m=>m.to));
@@ -414,7 +424,10 @@ function renderVariation(){
   $('#variation-engine').onclick=()=>replyVariation();
   $('#variation-back').onclick=()=>stepVariation(-1);$('#variation-forward').onclick=()=>stepVariation(1);
   document.querySelectorAll('[data-variation-ply]').forEach(b=>b.onclick=()=>{cancelVariation();v.cursor=Number(b.dataset.variationPly);v.selected=null;v.arrows=[];v.message='';renderReview();});
+  document.querySelectorAll('[data-origin-ply]').forEach(button=>button.onclick=()=>{cancelVariation();stopEvaluation();r.variation=null;selectReviewPly(Number(button.dataset.originPly));});
+  $('#exploration-comparison').ontoggle=e=>{v.comparisonOpen=e.target.open;};
   paintVariationCorrection(r,v);
+  const list=$('.exploration-move-scroll');if(list){list.scrollTop=listTop;const selected=list.querySelector?.('[aria-current="step"]');if(selected){const top=selected.offsetTop,bottom=top+selected.offsetHeight;if(top<list.scrollTop)list.scrollTop=top;else if(bottom>list.scrollTop+list.clientHeight)list.scrollTop=bottom-list.clientHeight;}}
   scheduleVariation(v);
 }
 function appendVariation(v,board,move){v.analysis?.cancel();v.positions=v.positions.slice(0,v.cursor+1);v.positions.push({fen:board.fen(),san:move.san,uci:move.from+move.to+(move.promotion||''),last:[move.from,move.to]});v.cursor++;v.selected=null;v.arrows=[];}

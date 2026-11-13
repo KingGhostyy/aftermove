@@ -28,6 +28,18 @@ export function reviewAlternativeSource(game,ply){
  return move?{move,fen:move.fen}:null;
 }
 
+export function explorationMoves(game,positions){
+ const history=reviewMoves(game),origin=positions[0]?.fen;
+ const end=history.findIndex(move=>move.afterFen===origin);
+ const annotations=new Map(game.moves.map(move=>[move.ply,move]));
+ const result=history.slice(0,end+1).map(move=>({...move,...annotations.get(move.ply),source:'game'}));
+ for(let index=1;index<positions.length;index++){
+  const fen=positions[index-1].fen;
+  result.push({san:positions[index].san,color:new Chess(fen).turn(),moveNumber:Number(fen.split(' ')[5]),source:'variation',index});
+ }
+ return result;
+}
+
 // Display-only grades: preserve stored error thresholds and cached analysis.
 export function reviewMoveQuality(move){
  if(!Number.isFinite(move?.loss))return null;
