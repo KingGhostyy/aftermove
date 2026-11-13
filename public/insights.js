@@ -41,6 +41,11 @@ export function moveInsight(fen,line=[]){
   }
   if(!parts.length){
    if(move.flags.includes('k')||move.flags.includes('q'))parts.push(`${move.san} castles: ${player}’s king moves away from the center and rook comes into play.`);
+   else if(move.piece==='p'&&['d4','e4','d5','e5'].includes(move.to)){
+    const rank=Number(move.to[1])+(side==='w'?1:-1),file=move.to.charCodeAt(0);
+    const controlled=[String.fromCharCode(file-1)+rank,String.fromCharCode(file+1)+rank];
+    parts.push(`${move.san} puts ${player}’s pawn in the center, controlling ${controlled.join(' and ')}.`);
+   }
    else if(['n','b'].includes(move.piece)&&move.from[1]===(side==='w'?'1':'8'))parts.push(`${move.san} develops ${player}’s ${names[move.piece]} from the back rank, bringing another piece into play.`);
    else parts.push(`${move.san} moves ${player}’s ${names[move.piece]} to ${move.to}. No clear forcing tactic is established by this move alone; compare the engine continuation.`);
   }

@@ -1,5 +1,5 @@
 import {moveInsight,playedMoveInsight} from './insights.js';
-import {createCorrection,replacementPositions} from './corrections.js';
+import {createCorrection,replacementPositions,comparisonPositions} from './corrections.js';
 import {VariationAnalysis,variationBoard} from './variation-engine.js';
 import { savedGameCollection, progressSummary } from './progress.js';
 import { PUZZLES, THEMES, freshExercises, weaknessProfile, readPuzzleHistory, markPuzzleSeen } from './puzzles.js';
@@ -288,14 +288,42 @@ function renderReview(){
   const list=$('.review-move-scroll'),current=list?.querySelector('[aria-current="step"]');if(list)restoreReviewScroll(page,list,current,scroll,!previousList||previouslySelected!==current?.dataset.reviewPly);
 }
 
+function optionButton(id,label,on,disabled=false){
+ return `<button type="button" class="option-toggle" id="${id}" aria-pressed="${!!on}" ${disabled?'disabled':''}><span>${label}</span><span class="toggle-state" aria-hidden="true">${on?'On':'Off'}</span></button>`;
+}
+function paintOption(button,on){
+ if(!button)return;button.setAttribute('aria-pressed',String(!!on));const badge=button.querySelector('.toggle-state');if(badge)badge.textContent=on?'On':'Off';
+}
+function comparisonMarkup(c,model,mode){
+ if(!c)return '';
+ const card=(choice,label,uci)=>{const idea=moveInsight(c.fen,[uci]);return `<button type="button" class="comparison-choice" data-compare-mode="${mode}" data-compare-choice="${choice}" aria-pressed="${(model.comparisonChoice||'your')===choice}" ${model.busy?'disabled':''}><span>${label}</span><strong>${escape(sanLine(c.fen,[uci]))}</strong><span>${escape(idea?.text||'Step through the continuation to explore this move.')}</span></button>`;};
+ return `<section class="move-comparison" aria-label="Compare your move with the best move"><h3>Compare the two moves</h3><p>Same starting position. Select a move to see its arrows, then step forward to see the reply.</p><div class="comparison-choices">${card('your',c.playedLabel||'Your move',c.played)}${card('best','Best move',c.best)}</div>${c.assessment?.message?`<p class="sample-note">${escape(c.assessment.message)}</p>`:''}</section>`;
+}
+function bindComparison(mode){
+ document.querySelectorAll('[data-compare-mode="'+mode+'"]').forEach(button=>button.onclick=()=>mode==='variation'?compareVariation(button.dataset.compareChoice):comparePractice(button.dataset.compareChoice));
+}
+function compareVariation(choice){
+ const v=state.review?.variation,c=v?.comparison||v?.correction;if(!c||v.busy||state.running)return;
+ cancelVariation();stopEvaluation();v.comparison=c;v.comparisonChoice=choice;v.positions=comparisonPositions(c,choice);v.cursor=c.prefix.length;v.selected=null;v.arrows=[];v.showIdeas=true;v.message='Comparing '+(choice==='best'?'the best move.':'the played move.');renderReview();
+}
+function comparePractice(choice){
+ const p=state.practice,c=p?.comparison||p?.correction;if(!c||p.busy||state.running)return;
+ stopPlayback();stopEvaluation();p.comparison=c;p.comparisonChoice=choice;p.timeline=comparisonPositions(c,choice);p.cursor=c.prefix.length;p.lineStart=c.prefix.length-1;p.selected=null;p.arrows=[];p.showIdeas=true;p.explanation=explainMove(c.fen,choice==='best'?c.line:c.playedLine||[c.played]);p.category='Comparing '+(choice==='best'?'best move':'your move');p.feedback='Both moves start from the same position. Step forward to compare the replies.';renderPractice();
+}
+function completeComparisonLine(v,fen,result){
+ const c=v.comparison;if(!c||v.comparisonChoice!=='your'||c.playedLine?.length!==1||!result?.pv?.length)return false;
+ const move=new Chess(c.fen).move({from:c.played.slice(0,2),to:c.played.slice(2,4),promotion:c.played[4]});
+ if(move.after!==fen||v.cursor!==c.prefix.length)return false;
+ c.playedLine=[c.played,...result.pv];v.positions=comparisonPositions(c,'your');return true;
+}
 function coachingMarkup(idea,model){
  if(!idea)return '';
- return `<section class="board-coaching ${idea.tone==='risk'?'board-risk':''}" aria-label="Move explanation"><div><strong>${idea.tone==='risk'?'Watch the reply':'The idea'}</strong><label><input id="why-arrows" type="checkbox" ${model.showIdeas===false?'':'checked'}> Show idea arrows</label></div><p>${escape(idea.text)}</p></section>`;
+ return `<section class="board-coaching ${idea.tone==='risk'?'board-risk':''}" aria-label="Move explanation"><div><strong>${idea.tone==='risk'?'Watch the reply':'The idea'}</strong>${optionButton('why-arrows','Idea arrows',model.showIdeas!==false)}</div><p>${escape(idea.text)}</p></section>`;
 }
 function bindCoaching(model,idea,annotations){
  const toggle=$('#why-arrows');if(toggle&&idea){
-  toggle.onchange=e=>{model.showIdeas=e.target.checked;annotations.setIdeas(model.showIdeas?idea.arrows:[]);};
-  annotations.onIdeasCleared=()=>{toggle.checked=false;};
+  toggle.onclick=()=>{model.showIdeas=model.showIdeas===false;annotations.setIdeas(model.showIdeas?idea.arrows:[]);paintOption(toggle,model.showIdeas);};
+  annotations.onIdeasCleared=()=>paintOption(toggle,false);
  }
 }
 function cancelVariation(){const v=state.review?.variation;if(v){clearTimeout(v.autoTimer);v.autoTimer=null;v.autoBoth=false;v.request=null;v.analysis?.cancel();cancelMoveReview(v);v.busy=false;}}
@@ -305,14 +333,15 @@ function returnToOriginalGame(){
 }
 function cancelMoveReview(v){v.reviewAnalysis?.cancel();v.reviewAnalysis=null;v.attempt=null;v.correction=null;v.checkingMove=false;}
 function variationCorrectionMarkup(v){
+ if(v.comparison)return comparisonMarkup(v.comparison,v,'variation');
  if(v.checkingMove)return '<p class="sample-note">Checking your move…</p>';
  const c=v.correction;if(!c)return '';
- return `<div class="feedback ${['Mistake','Missed opportunity'].includes(c.assessment.category)?'wrong':''}"><strong>${escape(sanLine(c.fen,[c.played]))} · ${escape(c.assessment.category)}</strong><p>${escape(c.assessment.message)}</p><div class="correction-actions"><button class="secondary" id="variation-best" ${v.busy||state.running?'disabled':''}>Play best move</button></div></div>`;
+ return comparisonMarkup(c,v,'variation')+`<div class="correction-actions"><button class="secondary" id="variation-best" ${v.busy||state.running?'disabled':''}>Play best move</button></div>`;
 }
 function paintVariationCorrection(r,v){
  if(state.review!==r||r.variation!==v)return;
  const slot=$('.variation-correction');if(!slot)return;slot.innerHTML=variationCorrectionMarkup(v);
- $('#variation-best')?.addEventListener('click',()=>applyVariationBest());
+ $('#variation-best')?.addEventListener('click',()=>applyVariationBest());bindComparison('variation');
 }
 async function reviewVariationMove(r,v,attempt){
  const active=()=>state.review===r&&r.variation===v&&v.attempt===attempt;
@@ -324,6 +353,7 @@ async function reviewVariationMove(r,v,attempt){
   const candidate=v.analysis.peek(attempt.chosenFen)||await analysis.get(attempt.chosenFen);if(!active())return;
   const assessment=assessAlternative(best,candidate,new Chess(attempt.fen).turn());
   v.correction=createCorrection(attempt.prefix,attempt.fen,attempt.played,bestMove,[bestMove,...best.pv],assessment);
+  if(v.correction)v.correction.playedLine=[attempt.played,...candidate.pv];
   evalCache.set(bestBoard.fen(),best.score);
  }catch{/* A failed comparison must not invent a mistake or change the board. */}
  finally{analysis.cancel();if(v.reviewAnalysis===analysis)v.reviewAnalysis=null;if(active()){v.checkingMove=false;paintVariationCorrection(r,v);}}
@@ -350,10 +380,11 @@ function variationAnalysis(r,v){
 function paintVariationAnalysis(r,v,fen){
  if(state.review!==r||r.variation!==v||v.positions[v.cursor].fen!==fen)return;
  const result=v.analysis.peek(fen),board=variationBoard(v),ended=board.isGameOver();
+ if(completeComparisonLine(v,fen,result)){renderReview();return;}
  paintEval(result?.score??evalCache.get(fen));if(v.analysis.failure?.fen===fen)paintEvalUnavailable();
  v.suggestArrow?.(v.showSuggestion&&result?.best&&!ended?{from:result.best.slice(0,2),to:result.best.slice(2,4)}:null);
- const status=$('.variation-status');if(status)status.textContent=ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):(v.message||(result?.best?(v.showSuggestion?'Suggestion: '+sanLine(fen,[result.best]):'Next engine move ready.'):'Calculating next best move…'))+(v.autoBoth?' Autoplay is on. Uncheck both sides to stop.':'');
- const both=$('#variation-both');if(both)both.checked=!!v.autoBoth;
+ const status=$('.variation-status');if(status)status.textContent=ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):(v.message||(result?.best?(v.showSuggestion?'Suggestion: '+sanLine(fen,[result.best]):'Next engine move ready.'):'Calculating next best move…'))+(v.autoBoth?' Autoplay is on. Press Play both sides to stop.':'');
+ const both=$('#variation-both');paintOption(both,v.autoBoth);
  const auto=$('#variation-auto');if(auto)auto.disabled=!!v.autoBoth;
  const move=$('#variation-engine');if(move)move.disabled=!!(v.busy||v.autoBoth||ended||state.running);
 }
@@ -369,17 +400,17 @@ function renderVariation(){
   const suggestion=analysis.peek(shown.fen),ready=!!suggestion?.best,interactive=!v.busy&&!v.autoBoth&&!ended;
   const suggestionText=ready?sanLine(shown.fen,[suggestion.best]):'';
   const coaching=playedMoveInsight(v.positions,v.cursor);
-  $('#view').innerHTML=`<div class="section-title"><button class="text-button" id="return-game">← Return to original game</button><span class="pill">Your variation</span></div><div class="practice-layout"><div class="board-shell"><div class="board-meta"><strong>${board.turn()==='w'?'White':'Black'} to move</strong><small>Exploring move ${v.replacedMove?.moveNumber??r.game.moves[r.index].moveNumber}</small></div>${evalBoard(boardMarkup(shown.fen,r.game.color,interactive,v.selected,targets,shown.last),r.game.color)}${coachingMarkup(coaching,v)}<div class="line-controls"><button class="secondary" id="variation-back" aria-label="Previous variation move" ${v.cursor===0?'disabled':''}>←</button><span class="variation-navigation-title">${escape(shown.san)}<small>Step ${v.cursor} · ← / → keys</small><button class="variation-return" id="variation-return" aria-label="Back to original game">Back to original game</button></span><button class="secondary" id="variation-forward" aria-label="Next variation move" ${v.cursor===v.positions.length-1?'disabled':''}>→</button></div><div class="move-chips" aria-label="Your variation moves">${v.positions.map((p,i)=>`<button class="move-chip ${i===v.cursor?'current':''}" data-variation-ply="${i}">${escape(p.san)}</button>`).join('')}</div></div><section class="practice-card"><span class="tag">TRY YOUR IDEA</span><h2>${v.replacedMove?'The best move instead':'What if you played differently?'}</h2>${v.replacedMove?`<p class="replacement-context">Alternative to ${v.replacedMove.color==='w'?'White':'Black'}’s ${v.replacedMove.moveNumber}. ${escape(v.replacedMove.san)}. Your original game is unchanged.${v.positions[1]?.uci===v.replacedMove.from+v.replacedMove.to+(v.replacedMove.promotion||'')?' This was already the engine’s preferred move.':''}</p>`:''}<p>Drag a piece or click its destination. You can play either side. Going back and playing a new move starts a new line from there.</p><div class="variation-options"><label><input type="checkbox" id="variation-suggestion" ${v.showSuggestion?'checked':''}> Show engine suggestion on the board</label><label><input type="checkbox" id="variation-auto" ${v.auto?'checked':''} ${v.autoBoth?'disabled':''}> Engine replies to your moves</label><label><input type="checkbox" id="variation-both" ${v.autoBoth?'checked':''} ${ended||state.running?'disabled':''}> Engine replies automatically on both sides</label></div><div class="practice-actions"><button class="secondary" id="variation-engine" ${v.busy||v.autoBoth||ended||state.running?'disabled':''}>${v.busy?'Engine thinking…':'Play engine move'}</button><button class="text-button" id="variation-reset">Reset variation</button></div><p class="variation-status" role="status">${ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):escape(v.message||(ready?(v.showSuggestion?'Suggestion: '+suggestionText:'Next engine move ready.'):'Calculating next best move…'))}${v.autoBoth&&!ended?' Autoplay is on. Uncheck both sides to stop.':''}</p><div class="variation-correction">${variationCorrectionMarkup(v)}</div><p class="sample-note">The evaluation bar follows your variation. Navigation pauses autoplay. Return to the original game whenever you’re ready.</p></section></div>`;
+  $('#view').innerHTML=`<div class="section-title"><button class="text-button" id="return-game">← Return to original game</button><span class="pill">Your variation</span></div><div class="practice-layout"><div class="board-shell"><div class="board-meta"><strong>${board.turn()==='w'?'White':'Black'} to move</strong><small>Exploring move ${v.replacedMove?.moveNumber??r.game.moves[r.index].moveNumber}</small></div>${evalBoard(boardMarkup(shown.fen,r.game.color,interactive,v.selected,targets,shown.last),r.game.color)}${coachingMarkup(coaching,v)}<div class="line-controls"><button class="secondary" id="variation-back" aria-label="Previous variation move" ${v.cursor===0?'disabled':''}>←</button><span class="variation-navigation-title">${escape(shown.san)}<small>Step ${v.cursor} · ← / → keys</small><button class="variation-return" id="variation-return" aria-label="Back to original game">Back to original game</button></span><button class="secondary" id="variation-forward" aria-label="Next variation move" ${v.cursor===v.positions.length-1?'disabled':''}>→</button></div><div class="move-chips" aria-label="Your variation moves">${v.positions.map((p,i)=>`<button class="move-chip ${i===v.cursor?'current':''}" data-variation-ply="${i}">${escape(p.san)}</button>`).join('')}</div></div><section class="practice-card"><span class="tag">TRY YOUR IDEA</span><h2>${v.replacedMove?'The best move instead':'What if you played differently?'}</h2>${v.replacedMove?`<p class="replacement-context">Alternative to ${v.replacedMove.color==='w'?'White':'Black'}’s ${v.replacedMove.moveNumber}. ${escape(v.replacedMove.san)}. Your original game is unchanged.${(v.comparison?.best??v.positions[1]?.uci)===v.replacedMove.from+v.replacedMove.to+(v.replacedMove.promotion||'')?' This was already the engine’s preferred move.':''}</p>`:''}<p>Drag a piece or click its destination. You can play either side. Going back and playing a new move starts a new line from there.</p><div class="variation-correction">${variationCorrectionMarkup(v)}</div><div class="variation-options">${optionButton('variation-suggestion','Show engine suggestion',v.showSuggestion)}${optionButton('variation-auto','Automatic engine replies',v.auto,v.autoBoth)}${optionButton('variation-both','Play both sides',v.autoBoth,ended||state.running)}</div><div class="practice-actions"><button class="secondary" id="variation-engine" ${v.busy||v.autoBoth||ended||state.running?'disabled':''}>${v.busy?'Engine thinking…':'Play engine move'}</button><button class="text-button" id="variation-reset">Reset variation</button></div><p class="variation-status" role="status">${ended?(board.isCheckmate()?'Checkmate.':'Drawn position.'):escape(v.message||(ready?(v.showSuggestion?'Suggestion: '+suggestionText:'Next engine move ready.'):'Calculating next best move…'))}${v.autoBoth&&!ended?' Autoplay is on. Press Play both sides to stop.':''}</p><p class="sample-note">The evaluation bar follows your variation. Navigation pauses autoplay. Return to the original game whenever you’re ready.</p></section></div>`;
   const annotations=attachArrows($('#view .board'),r.game.color,v,v.showSuggestion&&ready&&!ended?{from:suggestion.best.slice(0,2),to:suggestion.best.slice(2,4)}:null,v.showIdeas===false?[]:coaching?.arrows||[]);v.suggestArrow=annotations.setSuggestion;bindCoaching(v,coaching,annotations);
   paintEval(suggestion?.score??evalCache.get(shown.fen));if(analysis.failure?.fen===shown.fen)paintEvalUnavailable();
   attachPieceDrag($('#view .board'),r.game.color,square=>interactive&&board.get(square)?.color===board.turn(),(from,to)=>{v.selected=from;playVariation(to);},from=>board.moves({square:from,verbose:true}).map(m=>m.to));
   document.querySelectorAll('[data-square]').forEach(b=>b.onclick=()=>playVariation(b.dataset.square));
   $('#return-game').onclick=returnToOriginalGame;
   $('#variation-return').onclick=returnToOriginalGame;
-  $('#variation-reset').onclick=()=>{cancelVariation();stopEvaluation();v.positions=v.positions.slice(0,1);v.cursor=0;v.selected=null;v.arrows=[];v.message='';renderReview();};
-  $('#variation-auto').onchange=e=>{v.auto=e.target.checked;};
-  $('#variation-suggestion').onchange=e=>{v.showSuggestion=e.target.checked;renderReview();};
-  $('#variation-both').onchange=e=>{if(e.target.checked){cancelMoveReview(v);v.autoBoth=true;v.selected=null;}else cancelVariation();v.message='';renderReview();};
+  $('#variation-reset').onclick=()=>{cancelVariation();stopEvaluation();v.positions=v.positions.slice(0,1);v.comparison=null;v.comparisonChoice=null;v.cursor=0;v.selected=null;v.arrows=[];v.message='';renderReview();};
+  $('#variation-auto').onclick=()=>{v.auto=!v.auto;paintOption($('#variation-auto'),v.auto);};
+  $('#variation-suggestion').onclick=()=>{v.showSuggestion=!v.showSuggestion;renderReview();};
+  $('#variation-both').onclick=()=>{if(!v.autoBoth){cancelMoveReview(v);v.autoBoth=true;v.selected=null;}else cancelVariation();v.message='';renderReview();};
   $('#variation-engine').onclick=()=>replyVariation();
   $('#variation-back').onclick=()=>stepVariation(-1);$('#variation-forward').onclick=()=>stepVariation(1);
   document.querySelectorAll('[data-variation-ply]').forEach(b=>b.onclick=()=>{cancelVariation();v.cursor=Number(b.dataset.variationPly);v.selected=null;v.arrows=[];v.message='';renderReview();});
@@ -398,7 +429,7 @@ async function playVariation(square){
   v.busy=false;v.request=null;if(promote===null)return;
   const move=board.move({from:v.selected,to:square,promotion:promote});
   const attempt={fen,played:move.from+move.to+(move.promotion||''),prefix:v.positions.slice(0,v.cursor+1),source:v.analysis?.peek(fen),chosenFen:board.fen()};
-  cancelMoveReview(v);v.attempt=attempt;v.checkingMove=true;stopEvaluation();appendVariation(v,board,move);v.message='';renderReview();reviewVariationMove(r,v,attempt);if(v.auto&&!board.isGameOver())await replyVariation({automatic:true});
+  cancelMoveReview(v);v.comparison=null;v.comparisonChoice=null;v.attempt=attempt;v.checkingMove=true;stopEvaluation();appendVariation(v,board,move);v.message='';renderReview();reviewVariationMove(r,v,attempt);if(v.auto&&!board.isGameOver())await replyVariation({automatic:true});
 }
 async function replyVariation({automatic=false}={}){
   const r=state.review,v=r?.variation;if(!v||v.busy||state.running)return;
@@ -409,7 +440,9 @@ async function replyVariation({automatic=false}={}){
   try{
     const result=await pending;
     if(state.review!==r||r.variation!==v||v.request!==request||v.positions[v.cursor].fen!==fen)return;
-    const uci=result.best;if(uci){const move=board.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci[4]});appendVariation(v,board,move);}else{v.message='No engine move available. You can still explore manually.';v.autoBoth=false;}
+    const uci=result.best;if(uci){
+      if(v.replacedMove&&v.cursor===0){const original=v.replacedMove.from+v.replacedMove.to+(v.replacedMove.promotion||'');if(original!==uci){v.comparison={prefix:v.positions.slice(0,1),fen,played:original,playedLabel:v.replacedMove.color===r.game.color?'Your move':'Opponent’s move',best:uci,line:result.pv?.[0]===uci?result.pv:[uci],playedLine:[original]};v.comparisonChoice='best';}}
+      const move=board.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci[4]});appendVariation(v,board,move);if(v.replacedMove&&v.comparisonChoice==='best'&&v.cursor===v.comparison?.prefix.length)v.positions=comparisonPositions(v.comparison,'best');}else{v.message='No engine move available. You can still explore manually.';v.autoBoth=false;}
   }catch(error){if(v.request===request&&error.name!=='AbortError'){v.message=error.message;v.autoBoth=false;}}
   finally{if(v.request===request){v.request=null;v.busy=false;if(state.review===r&&r.variation===v)renderReview();}}
 }
@@ -429,9 +462,10 @@ function renderPractice(){
   const {board,playable}=practicePosition(p,ex.color);
   const coaching=playedMoveInsight(p.timeline,p.cursor);
   const targets=p.selected&&playable?board.moves({square:p.selected,verbose:true}).map(m=>m.to):[];
-  $('#view').innerHTML=practiceHeader()+`<div class="practice-layout"><div class="board-shell"><div class="board-meta"><strong>${new Chess(shown.fen).turn()==='w'?'White':'Black'} to move</strong><small>Position ${state.exerciseIndex+1} of ${list.length}${ex.fresh?` · Puzzle rating ${ex.rating}`:''}</small></div>${evalBoard(boardMarkup(shown.fen,ex.color,playable,p.selected,targets,shown.last),ex.color)}${coachingMarkup(coaching,p)}<div class="board-bottom"><span>Right-click + drag to draw arrows.</span><button class="text-button" id="clear-arrows">Clear arrows</button></div><div class="line-controls"><button class="secondary" id="line-back" aria-label="Previous move" ${!p.timeline||p.cursor===0||p.busy?'disabled':''}>←</button><span>${p.timeline?(p.cursor===0?'Starting position':p.timeline[p.cursor].san):'Try a move to explore its line'}<small>${p.timeline?`Step ${p.cursor} of ${p.timeline.length-1} · ← / → keys`:'Drag a piece, or click then click'}</small></span><button class="secondary" id="line-forward" aria-label="Next move" ${!p.timeline||p.cursor===p.timeline.length-1||p.busy?'disabled':''}>→</button></div>${p.revealed&&p.timeline?`<div class="move-chips" aria-label="Continuation moves">${p.timeline.map((position,i)=>`<button class="move-chip ${i===p.cursor?'current':''}" data-ply="${i}" aria-current="${i===p.cursor?'step':'false'}" ${p.busy?'disabled':''}>${i===0?'Start':escape(position.san)}</button>`).join('')}</div>`:''}</div><section class="practice-card"><span class="tag">${ex.fresh?'FRESH POSITION · '+THEMES[ex.theme].toUpperCase():'YOUR GAME. ANOTHER CHANCE.'}</span><h2>${ex.kind}</h2><p class="instructions">Look for checks, captures, and threats. Sketch your ideas, then drag a piece to play your move. Keep playing your side after each engine reply.</p>${p.feedback?`<div class="feedback ${['Mistake','Missed opportunity','Unclear'].includes(p.category)?'wrong':''}" role="status">${p.category?`<strong>${escape(p.category)}</strong><br>`:''}${escape(p.feedback)}${p.correction?`<div class="correction-actions"><button class="secondary" id="practice-best" ${p.busy||state.running?'disabled':''}>Play best move</button></div>`:''}</div>`:''}${p.explanation?`<section class="coach-note"><span class="tag">${p.category==='Mistake'?'WHAT YOUR MOVE ALLOWS':'WHY THIS MOVE MATTERS'}</span><p>${escape(p.explanation)}</p></section>`:''}${p.solved&&!ex.fresh?`<div class="feedback"><strong>Compare with your game</strong><br><small>Earlier analysis flagged ${escape(ex.san)}. This fresh search checks your chosen move independently; a short search can change its assessment. Use the arrows below the board to compare the continuation.</small></div>`:''}<div class="practice-actions">${p.revealed&&p.timeline&&p.timeline.length>1?`<button class="secondary" id="play-line" ${p.busy?'disabled':''}>${p.playing?'Pause demonstration':'▶ Replay continuation'}</button>`:''}<button class="secondary" id="hint" ${p.solved||p.busy?'disabled':''}>Give me a hint</button><button class="text-button" id="reveal" ${p.revealed||p.busy?'disabled':''}>Show solution</button><button class="primary" id="next-exercise" ${p.busy?'disabled':''}>Next position →</button>${practiceHasStarted(p)?`<button class="text-button" id="retry" ${p.busy?'disabled':''}>Try again from start</button>`:''}</div><p class="sample-note">Explanations follow legal moves in the engine’s line. Short searches may miss deeper ideas.</p><div class="source">${ex.fresh?`<a href="${escape(ex.source)}" target="_blank" rel="noopener noreferrer">Lichess puzzle</a> · ${THEMES[ex.theme]}<br>CC0 puzzle database · checked with Stockfish 19 Lite.`:`From your game against ${escape(ex.game.opponent)} · ${escape(ex.game.timeClass)}<br>${escape(ex.game.opening)}`}</div></section></div>`;
+  $('#view').innerHTML=practiceHeader()+`<div class="practice-layout"><div class="board-shell"><div class="board-meta"><strong>${new Chess(shown.fen).turn()==='w'?'White':'Black'} to move</strong><small>Position ${state.exerciseIndex+1} of ${list.length}${ex.fresh?` · Puzzle rating ${ex.rating}`:''}</small></div>${evalBoard(boardMarkup(shown.fen,ex.color,playable,p.selected,targets,shown.last),ex.color)}${coachingMarkup(coaching,p)}<div class="board-bottom"><span>Right-click + drag to draw arrows.</span><button class="text-button" id="clear-arrows">Clear arrows</button></div><div class="line-controls"><button class="secondary" id="line-back" aria-label="Previous move" ${!p.timeline||p.cursor===0||p.busy?'disabled':''}>←</button><span>${p.timeline?(p.cursor===0?'Starting position':p.timeline[p.cursor].san):'Try a move to explore its line'}<small>${p.timeline?`Step ${p.cursor} of ${p.timeline.length-1} · ← / → keys`:'Drag a piece, or click then click'}</small></span><button class="secondary" id="line-forward" aria-label="Next move" ${!p.timeline||p.cursor===p.timeline.length-1||p.busy?'disabled':''}>→</button></div>${p.revealed&&p.timeline?`<div class="move-chips" aria-label="Continuation moves">${p.timeline.map((position,i)=>`<button class="move-chip ${i===p.cursor?'current':''}" data-ply="${i}" aria-current="${i===p.cursor?'step':'false'}" ${p.busy?'disabled':''}>${i===0?'Start':escape(position.san)}</button>`).join('')}</div>`:''}</div><section class="practice-card"><span class="tag">${ex.fresh?'FRESH POSITION · '+THEMES[ex.theme].toUpperCase():'YOUR GAME. ANOTHER CHANCE.'}</span><h2>${ex.kind}</h2><p class="instructions">Look for checks, captures, and threats. Sketch your ideas, then drag a piece to play your move. Keep playing your side after each engine reply.</p>${p.feedback?`<div class="feedback ${['Mistake','Missed opportunity','Unclear'].includes(p.category)?'wrong':''}" role="status">${p.category?`<strong>${escape(p.category)}</strong><br>`:''}${escape(p.feedback)}${p.correction?`<div class="correction-actions"><button class="secondary" id="practice-best" ${p.busy||state.running?'disabled':''}>Play best move</button></div>`:''}</div>`:''}${p.explanation?`<section class="coach-note"><span class="tag">${p.category==='Mistake'?'WHAT YOUR MOVE ALLOWS':'WHY THIS MOVE MATTERS'}</span><p>${escape(p.explanation)}</p></section>`:''}${p.solved&&!ex.fresh?`<div class="feedback"><strong>Compare with your game</strong><br><small>Earlier analysis flagged ${escape(ex.san)}. This fresh search checks your chosen move independently; a short search can change its assessment. Use the arrows below the board to compare the continuation.</small></div>`:''}${comparisonMarkup(p.comparison||p.correction,p,'practice')}<div class="practice-actions">${p.revealed&&p.timeline&&p.timeline.length>1?`<button class="secondary" id="play-line" ${p.busy?'disabled':''}>${p.playing?'Pause demonstration':'▶ Replay continuation'}</button>`:''}<button class="secondary" id="hint" ${p.solved||p.busy?'disabled':''}>Give me a hint</button><button class="text-button" id="reveal" ${p.revealed||p.busy?'disabled':''}>Show solution</button><button class="primary" id="next-exercise" ${p.busy?'disabled':''}>Next position →</button>${practiceHasStarted(p)?`<button class="text-button" id="retry" ${p.busy?'disabled':''}>Try again from start</button>`:''}</div><p class="sample-note">Explanations follow legal moves in the engine’s line. Short searches may miss deeper ideas.</p><div class="source">${ex.fresh?`<a href="${escape(ex.source)}" target="_blank" rel="noopener noreferrer">Lichess puzzle</a> · ${THEMES[ex.theme]}<br>CC0 puzzle database · checked with Stockfish 19 Lite.`:`From your game against ${escape(ex.game.opponent)} · ${escape(ex.game.timeClass)}<br>${escape(ex.game.opening)}`}</div></section></div>`;
   bindPracticeModes();
   if(!p.busy)requestEvaluation(shown.fen,shown.fen===ex.fen?ex.beforeScore:undefined);
+  bindComparison('practice');
   const clear=attachArrows($('#view .board'),ex.color,p,null,p.showIdeas===false?[]:coaching?.arrows||[]);bindCoaching(p,coaching,clear);$('#clear-arrows').onclick=clear;
   attachPieceDrag($('#view .board'),ex.color,square=>playable&&!state.running&&board.get(square)?.color===ex.color,(from,to)=>{p.selected=from;clickSquare(to,ex);},from=>board.moves({square:from,verbose:true}).map(m=>m.to));
   $('#practice-best')?.addEventListener('click',()=>applyPracticeBest());
@@ -439,8 +473,8 @@ function renderPractice(){
   document.querySelectorAll('[data-square]').forEach(b=>b.onclick=e=>{if(e.button===0)clickSquare(b.dataset.square,ex);});
   $('#line-back').onclick=()=>stepPractice(-1);$('#line-forward').onclick=()=>stepPractice(1);
   document.querySelectorAll('[data-ply]').forEach(b=>b.onclick=()=>{stopPlayback();p.cursor=Number(b.dataset.ply);p.selected=null;renderPractice();});
-  $('#hint').onclick=()=>{stopPlayback();p.correction=null;p.cursor=0;p.feedback=`Look for a move with your ${names[new Chess(ex.fen).get(ex.best.slice(0,2))?.type]||'piece'} on ${ex.best.slice(0,2)}. Check what it can attack or defend.`;renderPractice();document.querySelector(`[data-square="${ex.best.slice(0,2)}"]`)?.classList.add('hint');};
-  $('#reveal').onclick=()=>{stopPlayback();p.correction=null;p.category='Suggested move';p.solved=true;p.revealed=true;p.timeline=null;p.cursor=0;showPracticeLine(p,ex.fen,ex.pv);p.feedback='Here is the engine’s preferred move. Step through the reply to see the idea.';renderPractice();};
+  $('#hint').onclick=()=>{stopPlayback();p.correction=null;p.comparison=null;p.comparisonChoice=null;p.cursor=0;p.feedback=`Look for a move with your ${names[new Chess(ex.fen).get(ex.best.slice(0,2))?.type]||'piece'} on ${ex.best.slice(0,2)}. Check what it can attack or defend.`;renderPractice();document.querySelector(`[data-square="${ex.best.slice(0,2)}"]`)?.classList.add('hint');};
+  $('#reveal').onclick=()=>{stopPlayback();p.correction=null;p.comparison=null;p.comparisonChoice=null;p.category='Suggested move';p.solved=true;p.revealed=true;p.timeline=null;p.cursor=0;showPracticeLine(p,ex.fen,ex.pv);p.feedback='Here is the engine’s preferred move. Step through the reply to see the idea.';renderPractice();};
   $('#next-exercise').onclick=()=>{stopPlayback();stopEvaluation();state.exerciseIndex=(state.exerciseIndex+1)%list.length;if(practiceMode==='fresh'&&state.exerciseIndex===0)freshSession=null;state.practice=null;renderPractice();};
   $('#retry')?.addEventListener('click',()=>{stopPlayback();stopEvaluation();state.practice=null;renderPractice();});
 }
@@ -462,7 +496,7 @@ function startPlayback(p,maxPly=Infinity){
 function showPracticeLine(p,fen,line,cursor=p.cursor){extendPracticeLine(p,fen,line,cursor);p.explanation=explainMove(fen,line);p.selected=null;}
 function applyPracticeBest(){
  const p=state.practice,c=p?.correction;if(state.view!=='practice'||!c||p.busy||state.running)return;
- stopPlayback();stopEvaluation();p.timeline=replacementPositions(c);p.lineStart=c.prefix.length-1;p.cursor=p.lineStart+1;p.selected=null;p.arrows=[];p.correction=null;
+ stopPlayback();stopEvaluation();p.timeline=replacementPositions(c);p.lineStart=c.prefix.length-1;p.cursor=p.lineStart+1;p.selected=null;p.arrows=[];p.correction=null;p.comparison=null;p.comparisonChoice=null;
  p.category='Best move';p.feedback='Played the engine’s best move from before your attempt. Watch the reply to see the difference.';p.solved=true;
  p.explanation=explainMove(c.fen,c.line);startPlayback(p,2);
 }
@@ -488,7 +522,7 @@ async function clickSquare(square,ex){
   const promote=options[0].promotion?await promotion():undefined;if(promote===null)return;
   if(state.practice!==p||state.view!=='practice')return;
   const fen=board.fen();
-  stopPlayback();p.correction=null;p.explanation='';p.category='';p.demonstrate=false;
+  stopPlayback();p.correction=null;p.comparison=null;p.comparisonChoice=null;p.explanation='';p.category='';p.demonstrate=false;
   const move=board.move({from,to:square,promotion:promote});p.attempted=true;
   const uci=from+square+(move.promotion||'');p.selected=null;
   const solution=solutionContinuation(ex,fen);
@@ -512,6 +546,7 @@ async function clickSquare(square,ex){
     p.explanation+=" "+continuationConsequence(fen,[uci,...candidate.pv],ex.color);
     p.category=assessment.category;p.feedback=assessment.message;p.demonstrate=assessment.demonstrate;checked=true;
     p.correction=createCorrection(previousTimeline?previousTimeline.slice(0,startCursor+1):linePositions(fen,[]),fen,uci,suggested,[suggested,...best.pv],assessment);
+    if(p.correction)p.correction.playedLine=[uci,...candidate.pv];
     evalCache.set(bestBoard.fen(),best.score);
     if(assessment.accepted){p.solved=true;p.last=[from,square];}
     

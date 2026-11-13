@@ -10,3 +10,8 @@ export function createCorrection(prefix,fen,played,best,line,assessment){
 export function replacementPositions(correction){
  return [...correction.prefix,...linePositions(correction.fen,correction.line.slice(0,9)).slice(1).map((position,i)=>({...position,uci:correction.line[i]}))];
 }
+export function comparisonPositions(correction,choice){
+ if(!['your','best'].includes(choice))throw new Error('Unknown comparison choice');
+ const line=choice==='best'?correction.line:correction.playedLine||[correction.played];
+ return [...correction.prefix,...linePositions(correction.fen,line.slice(0,9)).slice(1).map((position,i)=>({...position,uci:line[i]}))];
+}

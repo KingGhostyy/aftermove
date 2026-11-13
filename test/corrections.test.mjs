@@ -19,3 +19,14 @@ test('a root correction supports Black promotions and rejects a mismatched sourc
  const c=createCorrection(prefix,fen,'h1g1','a2a1q',['a2a1q'],{category:'Mistake'});assert.equal(replacementPositions(c).at(-1).san,'a1=Q+');
  assert.throws(()=>createCorrection(linePositions(new Chess().fen(),[]),fen,'h1g1','a2a1q',['a2a1q'],{category:'Mistake'}),/position/i);
 });
+
+test('comparing either move starts at the same decision and preserves the original branches',async()=>{
+ const {comparisonPositions}=await import('../public/corrections.js');
+ const root=new Chess().fen(),prefix=linePositions(root,['e2e4','e7e5']),fen=prefix.at(-1).fen;
+ const c={prefix,fen,played:'f1a6',best:'g1f3',playedLine:['f1a6','b7a6'],line:['g1f3','b8c6']};
+ const original=JSON.stringify(c);
+ assert.deepEqual(comparisonPositions(c,'your').map(p=>p.san),['Start','e4','e5','Ba6','bxa6']);
+ assert.deepEqual(comparisonPositions(c,'best').map(p=>p.san),['Start','e4','e5','Nf3','Nc6']);
+ assert.equal(JSON.stringify(c),original);
+ assert.throws(()=>comparisonPositions(c,'unknown'),/choice/i);
+});

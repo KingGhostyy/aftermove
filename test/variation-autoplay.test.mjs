@@ -6,7 +6,7 @@ import {Chess} from 'chess.js';
 import {playedMoveInsight} from '../public/insights.js';
 import {variationBoard} from '../public/variation-engine.js';
 const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
-const code=app.slice(app.indexOf('function coachingMarkup('),app.indexOf('function renderPractice(){'));
+const code=app.slice(app.indexOf('function optionButton('),app.indexOf('function renderPractice(){'));
 function setup(){
  const v={positions:[{fen:new Chess().fen(),san:'Start'}],cursor:0,autoBoth:true,auto:false,busy:false},r={variation:v},timers=new Map();let id=0;
  const context={state:{review:r,running:false},playedMoveInsight,variationBoard,Chess,stopEvaluation(){},clearTimeout:id=>timers.delete(id),setTimeout:callback=>{timers.set(++id,callback);return id;},renderReview:()=>context.scheduleVariation(v)};
@@ -46,4 +46,13 @@ test('returning to original game cancels pending work and preserves the selected
  context.returnToOriginalGame();
  assert.equal(r.variation,null);assert.equal(r.index,4);assert.equal(r.position.ply,9);
  assert.equal(timers.size,0);assert.equal(cancelled,1);assert.equal(stopped,1);assert.equal(rendered,1);
+});
+
+test('Show best instead makes its historical comparison reply available immediately',async()=>{
+ const {v,r,context}=setup();v.autoBoth=false;v.replacedMove={from:'d2',to:'d4',color:'w'};r.game={color:'w'};
+ const {comparisonPositions}=await import('../public/corrections.js');context.comparisonPositions=comparisonPositions;
+ const analysis={get:async()=>({best:'e2e4',pv:['e2e4','e7e5']}),cancel(){}};context.variationAnalysis=()=>analysis;
+ await context.replyVariation();
+ assert.deepEqual(v.positions.map(p=>p.san),['Start','e4','e5']);assert.equal(v.cursor,1);
+ assert.equal(v.comparison.played,'d2d4');
 });

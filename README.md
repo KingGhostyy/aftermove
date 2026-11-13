@@ -87,3 +87,7 @@ In game review, select either player’s move and choose **Show best instead** b
 ## Board explanations
 
 Game review, variations, and played practice moves show a short board-based explanation beside the board: checks, forks, undefended pieces, captures, development, castling, and promotions. Sage arrows show the move or attacking targets; muted red arrows show a legal capture against an undefended piece. Use Show idea arrows to hide them; left-click or Clear arrows dismisses them too. Initial practice positions reveal no explanation or answer arrows. These are observable board facts, not a complete strategic diagnosis or a claim that every sacrifice is bad.
+
+## Compare a move and its alternative
+
+After a checked practice or exploration move, the comparison cards keep **Your move** and **Best move** available from the same starting position. Selecting a card updates the board, explanation, and arrows; the navigation arrows step through that branch's engine reply. Switching cards pauses autoplay and does not count as solving a practice puzzle. Show best instead in historical review also retains the played move for comparison, including an opponent's move. Engine settings and idea arrows use rounded On/Off buttons.
