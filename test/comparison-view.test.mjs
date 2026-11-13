@@ -46,3 +46,12 @@ test('idea arrows can be turned off before the first exploration move',()=>{
  assert.equal(v.showIdeas,false);assert.deepEqual(Array.from(ideas),[]);assert.equal(attributes['aria-pressed'],'false');
  toggle.onclick();assert.equal(v.showIdeas,true);assert.deepEqual(Array.from(ideas),[]);
 });
+
+test('review Compare moves action is prominent and explains when selection is needed',()=>{
+ const {context}=setup();context.escape=value=>value;
+ const empty=context.reviewCompareAction(null,false);
+ assert.match(empty,/Compare moves/);assert.match(empty,/disabled/);assert.match(empty,/Select a move/);
+ const selected=context.reviewCompareAction({move:{color:'b',moveNumber:11,san:'h6'}},false);
+ assert.match(selected,/class="primary"/);assert.match(selected,/Black · 11. h6/);assert.doesNotMatch(selected,/disabled/);
+ assert.match(context.reviewCompareAction({move:{color:'w',moveNumber:2,san:'Nf3'}},true),/disabled/);
+});
