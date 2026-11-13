@@ -55,3 +55,13 @@ export function reviewMoveQuality(move){
  if(move.loss<=20)return {label:'Good',tone:'good'};
  return null;
 }
+
+// Explain an uncolored row without changing its stored analysis or error grade.
+export function reviewMoveStatus(move){
+ const quality=reviewMoveQuality(move);
+ if(quality)return quality;
+ const complete=move&&Number.isFinite(move.loss)&&Number.isFinite(move.beforeScore)&&Number.isFinite(move.afterScore)&&move.depth>=10&&move.afterDepth>=10&&move.best&&(move.uci||(move.from&&move.to));
+ if(!complete)return {label:'Not analyzed',tone:'unrated',description:move?'Analysis is missing or the quick search was too shallow to assign a reliable grade.':'This player’s moves have not been analyzed.'};
+ if(move.beforeScore*(move.color==='b'?-1:1)<-99000)return {label:'Forced mate',tone:'forced',description:'The engine already saw a forced mate against this side before the move.'};
+ return {label:'Neutral',tone:'neutral',description:'Analyzed, with no standout good or bad grade.'};
+}
