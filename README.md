@@ -91,3 +91,5 @@ Game review, variations, and played practice moves show a short board-based expl
 ## Compare a move and its alternative
 
 After a checked practice or exploration move, the comparison cards keep **Your move** and **Best move** available from the same starting position. Selecting a card updates the board, explanation, and arrows; the navigation arrows step through that branch's engine reply. Switching cards pauses autoplay and does not count as solving a practice puzzle. Show best instead in historical review also retains the played move for comparison, including an opponent's move. Engine settings and idea arrows use rounded On/Off buttons.
+
+Press **Space** in game review or move exploration to play the next engine move without scrolling. Holding Space does not queue extra moves; typing in fields keeps normal Space behavior. The shortcut is shown on the Play engine move buttons. Legal capture targets use the same green dots as empty destinations, above the piece artwork.
