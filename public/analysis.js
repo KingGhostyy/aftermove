@@ -13,7 +13,11 @@ export function classifyMove(before, after, color) {
   const matePosition=Math.abs(before)>99000||Math.abs(after)>99000;
   const mateLost=matePosition&&((b>99000&&a<=99000)||(b>=-99000&&a< -99000));
   const loss=matePosition?(mateLost?1000:0):Math.max(0,Math.round(b-a));
-  return {loss,matePosition,mateLost,label:loss>=200?'Blunder':loss>=100?'Mistake':loss>=50?'Inaccuracy':'Sound'};
+  const missed=loss>=100&&b>=150&&a>=-50;
+  return {loss,matePosition,mateLost,label:missed?'Miss':loss>=200?'Blunder':loss>=100?'Mistake':loss>=50?'Inaccuracy':'Sound'};
+}
+export function isMiss(move){
+ return move.loss>=100&&(move.label==='Miss'||(Number.isFinite(move.beforeScore)&&Number.isFinite(move.afterScore)&&classifyMove(move.beforeScore,move.afterScore,move.color).label==='Miss'));
 }
 export function phaseOf(chess, ply) {
   const pieces = chess.board().flat().filter(Boolean);
@@ -33,7 +37,7 @@ export function parseGame(raw, username) {
   return {id:raw.url, url:raw.url, color, opponent:opponent.username, rating:player.rating,timeControl:raw.time_control,
     result:player.result==='win'?'Win':draw.includes(player.result)?'Draw':'Loss',
     timeClass:raw.time_class||'unknown', opening:header.ECOUrl?.split('/').pop()?.replaceAll('-',' ')||header.ECO||'Unclassified opening',
-    date:raw.end_time, history:history.map((m,i)=>({...m,ply:i,moveNumber:Math.floor(i/2)+1,fen:m.before,afterFen:m.after})), moves:history.map((m,i)=>({...m,...timings[i],ply:i,moveNumber:Math.floor(i/2)+1,fen:m.before,afterFen:m.after,uci:m.from+m.to+(m.promotion||''),phase:phaseOf(new Chess(m.before),i)})).filter(m=>m.color===color)};
+    date:raw.end_time, history:history.map((m,i)=>({...m,...timings[i],ply:i,moveNumber:Math.floor(i/2)+1,fen:m.before,afterFen:m.after})), moves:history.map((m,i)=>({...m,...timings[i],ply:i,moveNumber:Math.floor(i/2)+1,fen:m.before,afterFen:m.after,uci:m.from+m.to+(m.promotion||''),phase:phaseOf(new Chess(m.before),i)})).filter(m=>m.color===color)};
 }
 export function summarize(games) {
   const moves=games.flatMap(g=>g.moves).filter(m=>Number.isFinite(m.loss));
@@ -43,7 +47,7 @@ export function summarize(games) {
     return {name,count:subset.length,numericCount:numeric.length,loss:numeric.length?Math.round(numeric.reduce((s,m)=>s+m.loss,0)/numeric.length):0,errors:subset.filter(m=>m.loss>=100).length};
   });
   const eligible=phases.filter(p=>p.count>=5);
-  return {totalMoves:moves.length,blunders:moves.filter(m=>m.loss>=200).length,mistakes:moves.filter(m=>m.loss>=100&&m.loss<200).length,
+  return {totalMoves:moves.length,misses:moves.filter(isMiss).length,blunders:moves.filter(m=>m.loss>=200&&!isMiss(m)).length,mistakes:moves.filter(m=>m.loss>=100&&m.loss<200&&!isMiss(m)).length,
     sound:moves.filter(m=>m.loss<50).length,phases,focus:[...eligible].sort((a,b)=>b.loss-a.loss)[0]?.name||null,
     strength:[...eligible].filter(p=>p.numericCount>=5).sort((a,b)=>a.loss-b.loss)[0]||null,
     wins:games.filter(g=>g.result==='Win').length,draws:games.filter(g=>g.result==='Draw').length};

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {savedGameCollection,progressSummary} from '../public/progress.js';
+import {summarize} from '../public/analysis.js';
+test('missed wins count as costly moves without being mislabeled as blunders',()=>{
+ const g={...game('miss',1,[300]),moves:[{loss:300,beforeScore:300,afterScore:0,color:'w',phase:'Opening'}]};
+ const s=progressSummary([g]);assert.equal(s.misses,1);assert.equal(s.blunders,0);assert.equal(s.errorRate,100);
+ const summary=summarize([g]);assert.equal(summary.misses,1);assert.equal(summary.blunders,0);
+});
 const game=(id,date,losses,timeClass='rapid')=>({id,date,timeClass,opponent:id,moves:losses.map(loss=>({loss}))});
 test('progress includes older cached games once and uses the latest saved review',()=>{
  const old=game('old',1,[200]),newer=game('new',2,[0]);
