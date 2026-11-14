@@ -94,7 +94,7 @@ function thinkingSection(){
   const moments=thinkingMoments(state.games),hasTiming=state.games.some(g=>g.moves.some(m=>Number.isFinite(m.thinkSeconds)));
   return '<section class="panel"><div class="panel-header"><h2>Where your thinking got stuck</h2><span class="muted">CLOCK + MOVE QUALITY</span></div>'+ (moments.length?moments.map(({game,move,median})=>`<div class="thinking-row"><div><strong>${Math.round(move.thinkSeconds)} seconds on ${move.moveNumber}. ${escape(move.san)}</strong><p>Typical move: ${Math.round(median)}s in this game · ${escape(move.label)} · vs ${escape(game.opponent)}</p></div><button class="secondary review" data-id="${escape(game.id)}" data-ply="${move.ply}">Look deeper →</button></div>`).join(''): '<p class="sample-note">'+(hasTiming?'No unusually long-think mistakes found in this batch. That is not a judgment of your overall thinking.':'Clock data is missing from these saved games. Missing clocks stay marked as unavailable.')+'</p>')+'<p class="sample-note">Flags mistakes after at least 15 seconds and twice your median move time in the same game, with at least five timed moves. Time spent does not tell us what you were thinking.</p></section>';
 }
-function gameTable(games,preview=false){return `<div class="section-title"><div><h2>${preview?'Recent games':'Your analyzed games'}</h2><p>Explore the turning points, one move at a time.</p></div>${preview?'<button class="text-button" id="all-games">View all games →</button>':''}</div><div class="panel table-wrap" style="margin-top:0;padding:5px 10px"><table class="game-table"><thead><tr><th>Opponent / opening</th><th>Format</th><th>Result</th><th>Costly moves</th><th></th></tr></thead><tbody>${games.map(g=>`<tr><td><strong>${escape(g.opponent)}</strong><span class="opening">${escape(g.opening)}</span></td><td>${escape(g.timeClass)}<span class="opening">${g.color==='w'?'White':'Black'} · ${g.date?new Date(g.date*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</span></td><td><span class="pill ${g.result.toLowerCase()}">${g.result}</span></td><td>${g.moves.filter(m=>m.loss>=100).length}</td><td><button class="text-button review" data-id="${escape(g.id)}">Explore →</button></td></tr>`).join('')}</tbody></table></div>`;}
+function gameTable(games,preview=false){return `<div class="section-title"><div><h2>${preview?'Recent games':'Your analyzed games'}</h2><p>${preview?'Explore the turning points, one move at a time.':`${games.length} saved ${games.length===1?'game':'games'} · newest first · all analyzed batches`}</p></div>${preview?'<button class="text-button" id="all-games">View all games →</button>':''}</div><div class="panel table-wrap" style="margin-top:0;padding:5px 10px"><table class="game-table"><thead><tr><th>Opponent / opening</th><th>Format</th><th>Result</th><th>Costly moves</th><th></th></tr></thead><tbody>${games.map(g=>`<tr><td><strong>${escape(g.opponent)}</strong><span class="opening">${escape(g.opening)}</span></td><td>${escape(g.timeClass)}<span class="opening">${g.color==='w'?'White':'Black'} · ${g.date?new Date(g.date*1000).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</span></td><td><span class="pill ${g.result.toLowerCase()}">${g.result}</span></td><td>${g.moves.filter(m=>m.loss>=100).length}</td><td><button class="text-button review" data-id="${escape(g.id)}">Explore →</button></td></tr>`).join('')}</tbody></table></div>`;}
 function emptyState(title,description){return `<section class="empty-state"><div class="empty-piece">♘</div><h2>${title}</h2><p>${description}</p><button class="secondary" id="back-overview">Back to overview</button></section>`;}
 function renderProgress(){
  const games=allSavedGames(),formats=[...new Set(games.map(g=>g.timeClass).filter(Boolean))];
@@ -118,21 +118,22 @@ function bindPracticeModes(){
 }
 
 function render(){
+  const allGames=savedGameCollection(state.cache,state.games).reverse();
   document.body.classList.remove('exploring','reviewing');
   const titles={overview:state.games.length?'A clearer picture of your chess.':'Every game has a lesson.',games:'Look back. See more.',practice:'A second chance at the right move.',progress:'Your chess, over time.'};
   const subtitles={overview:state.games.length?`A few lessons from ${state.games.length} ${state.games.length===1?'game':'games'} by ${state.username}.`: 'Find yours. Turn your recent games into a clear path forward.',games:'Follow your decisions and uncover the moments that changed the game.',practice:'Fresh training positions and real moments from your games.',progress:'Look for a direction across all your saved games.'};
   $('#page-title').textContent=titles[state.view];$('#page-subtitle').textContent=subtitles[state.view];$('#breadcrumb').textContent=state.view==='games'?'Your games':state.view[0].toUpperCase()+state.view.slice(1);
-  $('#game-count').textContent=state.games.length;$('#practice-count').textContent=exercises().length;$('#sidebar-user').textContent=state.username||'Your next move';
+  $('#game-count').textContent=allGames.length;$('#practice-count').textContent=exercises().length;$('#sidebar-user').textContent=state.username||'Your next move';
   document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
   $('#import-panel').hidden=state.view!=='overview';renderGamePicker();
   if(state.view==='progress'){renderProgress();return;}
   if(state.view==='practice'){renderPractice();return;}
   if(state.review){renderReview();return;}
-  $('#view').innerHTML=state.view==='overview'?overview():state.games.length?gameTable(state.games):emptyState('Your story starts with a game','Enter your Chess.com username in Overview to analyze your first batch.');
+  $('#view').innerHTML=state.view==='overview'?overview():allGames.length?gameTable(allGames):emptyState('Your story starts with a game','Enter your Chess.com username in Overview to analyze your first batch.');
   $('#focus-practice')?.addEventListener('click',()=>setView('practice'));
   $('#all-games')?.addEventListener('click',()=>setView('games'));
   $('#back-overview')?.addEventListener('click',()=>setView('overview'));
-  document.querySelectorAll('.review').forEach(b=>b.onclick=()=>{const game=state.games.find(g=>g.id===b.dataset.id);lastEvalScore=undefined;state.view='games';state.review={game,index:Math.max(0,b.dataset.ply?game.moves.findIndex(m=>m.ply===Number(b.dataset.ply)):game.moves.findIndex(m=>m.loss>=100)),after:false};render();});
+  document.querySelectorAll('.review').forEach(b=>b.onclick=()=>{const game=allGames.find(g=>g.id===b.dataset.id);if(!game)return;lastEvalScore=undefined;state.view='games';state.review={game,index:Math.max(0,b.dataset.ply?game.moves.findIndex(m=>m.ply===Number(b.dataset.ply)):game.moves.findIndex(m=>m.loss>=100)),after:false};render();});
 }
 
 function renderGamePicker(){
@@ -199,7 +200,7 @@ async function analyzeSelectedGames(){
         if(!state.running)break;
         state.games.push(game);analyzed++;await save();render();
       }
-      if(state.running&&await save()){notice(`Analyzed and saved ${analyzed} selected ${analyzed===1?'game':'games'}. ${skipped?`${skipped} unreadable game(s) skipped. `:''}${data.limited?'Import checked the most recent 24 archive months. ':''}Your lessons and practice positions are ready.`);}
+      if(state.running&&await save()){notice(`Analyzed and saved ${analyzed} ${analyzed===1?'game':'games'} in this batch. ${savedGameCollection(state.cache,state.games).length} saved in total. ${skipped?`${skipped} unreadable game(s) skipped. `:''}${data.limited?'Import checked the most recent 24 archive months. ':''}Your lessons and practice positions are ready.`);}
     }catch(error){if(error.name!=='AbortError')notice(error.message||'Something went wrong. Please try again.',true);}
     finally{state.engine?.stop();state.engine=null;state.running=false;$('#load-games').disabled=false;$('#username').disabled=false;if(picker?.username.toLowerCase()===username.toLowerCase()&&state.username.toLowerCase()===username.toLowerCase()){picker.cache=state.cache;picker.choices=gameChoices(picker.choices.map(g=>g.raw),username,new Set(state.cache.keys()));picker.selected=new Set([...picker.selected].filter(id=>!state.cache.has(id)));}$('#job-panel').hidden=true;render();}
   };
