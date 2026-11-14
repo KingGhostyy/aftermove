@@ -55,6 +55,7 @@ test('right-button pointer gesture draws, toggles, cancels and clears annotation
     clear.setSuggestion(null);assert.equal(board.children[0].children.length,0);
     let dismissed=0;clear.onIdeasCleared=()=>dismissed++;
     clear.setIdeas([{from:'a8',to:'a3',tone:'risk'}]);assert.equal(board.children[0].children.length,2);
+    clear.setIdeas([{from:'e4',to:'f2',tone:'threat'}]);assert.equal(board.children[0].children[0].attrs['stroke-dasharray'],'.22 .16');assert.equal(board.children[0].children[0].attrs.stroke,'#55774c');
     board.handlers.pointerdown(event(450,650,0));assert.equal(board.children[0].children.length,0);assert.equal(model.showIdeas,false);assert.equal(dismissed,1);
     clear.setIdeas([{from:'e2',to:'e4',tone:'idea'}]);clear();assert.equal(board.children[0].children.length,0);assert.equal(dismissed,2);
   }finally{delete globalThis.document;}

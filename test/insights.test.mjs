@@ -2,6 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Chess} from 'chess.js';
 import {moveInsight,playedMoveInsight} from '../public/insights.js';
+test('Ne4 explains the potential Nxf2 fork and its legal capture response',()=>{
+ const idea=moveInsight('r4rk1/5ppp/4p3/p2p4/P2B4/7P/3n1PP1/R2R2K1 b - - 1 24',['d2e4']);
+ assert.match(idea.text,/potential fork.*Nxf2.*rook on d1.*pawn on h3/i);
+ assert.match(idea.text,/Bxf2/);assert.doesNotMatch(idea.text,/No clear forcing tactic|also attacks the pawn/);
+ assert.deepEqual(idea.arrows.map(a=>[a.from,a.to,a.tone]),[['e4','f2','threat'],['f2','d1','threat'],['f2','h3','threat']]);
+});
+test('safe checking fork threats name the future jump without claiming they are already checks',()=>{
+ const idea=moveInsight('3k3r/8/8/8/8/5N2/8/4K3 w - - 0 1',['f3e5']);
+ assert.match(idea.text,/potential fork.*Nf7\+.*king on d8.*rook on h8/i);
+ assert.doesNotMatch(idea.text,/Ne5 creates a fork|Ne5 gives check/);
+});
+test('an illegal pinned knight follow-up is not presented as a fork threat',()=>{
+ const idea=moveInsight('4r2k/8/8/8/8/8/2N5/4K3 w - - 0 1',['c2e3']);
+ assert.doesNotMatch(idea.text,/potential fork/);
+});
+test('a future capture that pins the knight cannot claim legal attacks on two other pieces',()=>{
+ const idea=moveInsight('k7/8/8/8/7b/3r2Nq/5r1R/4K3 w - - 0 1',['g3h1']);
+ assert.doesNotMatch(idea.text,/potential fork.*Nxf2/);
+});
 test('a checking knight fork explains both targets with arrows on the resulting board',()=>{
  const result=moveInsight('4k2r/8/8/8/8/3N4/8/4K3 w - - 0 1',['d3f4']);
  // Nf4 attacks neither target: ordinary moves must not invent a fork.

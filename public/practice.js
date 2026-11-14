@@ -73,6 +73,7 @@ export function attachArrows(board,orientation,model,suggestion=null,ideas=[]){
       if(arrow.from===arrow.to){const c=document.createElementNS(svg.namespaceURI,'circle');c.setAttribute('cx',x1);c.setAttribute('cy',y1);c.setAttribute('r','.39');c.setAttribute('fill','none');c.setAttribute('stroke','#df9838');c.setAttribute('stroke-width','.12');svg.append(c);continue;}
       const angle=Math.atan2(y2-y1,x2-x1),dx=Math.cos(angle),dy=Math.sin(angle),baseX=x2-dx*.4,baseY=y2-dy*.4;
       const line=document.createElementNS(svg.namespaceURI,'line');for(const [k,v] of Object.entries({x1,y1,x2:baseX,y2:baseY,stroke:color,'stroke-width':.16,'stroke-linecap':'round'}))line.setAttribute(k,v);svg.append(line);
+      if(arrow.idea&&arrow.tone==='threat')line.setAttribute('stroke-dasharray','.22 .16');
       const head=document.createElementNS(svg.namespaceURI,'polygon');head.setAttribute('points',`${x2},${y2} ${baseX-dy*.24},${baseY+dx*.24} ${baseX+dy*.24},${baseY-dx*.24}`);head.setAttribute('fill',color);if(arrow.suggested){line.classList.add('engine-suggestion');head.classList.add('engine-suggestion');}svg.append(head);
     }
   };

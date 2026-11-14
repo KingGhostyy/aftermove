@@ -1,6 +1,21 @@
 import {Chess} from 'chess.js';
 const names={p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'},value={p:1,n:3,b:3,r:5,q:9,k:100};
 const play=(board,uci)=>board.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci[4]});
+// One legal future knight jump: a possible double attack, never proof of a forced win.
+function forkThreat(ownTurn,square,side){
+ const enemy=side==='w'?'b':'w',options=[];
+ for(const jump of ownTurn.moves({square,verbose:true})){
+  const future=new Chess(ownTurn.fen());future.move(jump);
+  const fields=future.fen().split(' ');fields[1]=side;fields[3]='-';
+  const followUps=new Chess(fields.join(' ')).moves({square:jump.to,verbose:true});
+  const targets=future.board().flat().filter(p=>p&&p.color===enemy&&future.attackers(p.square,side).includes(jump.to)&&(p.type==='k'?future.isCheck():followUps.some(m=>m.to===p.square))).sort((a,b)=>value[b.type]-value[a.type]);
+  if(targets.length<2||value[targets[0].type]<3)continue;
+  const captures=future.moves({verbose:true}).filter(reply=>reply.to===jump.to&&reply.captured==='n').sort((a,b)=>value[a.piece]-value[b.piece]||a.san.localeCompare(b.san));
+  const pair=targets.slice(0,2),score=(captures.length?0:1000)+pair.reduce((s,p)=>s+value[p.type],0)+(jump.captured?10:0);
+  options.push({jump,pair,capture:captures[0],score});
+ }
+ return options.sort((a,b)=>b.score-a.score||a.jump.san.localeCompare(b.jump.san))[0];
+}
 // These are board facts, not a replacement for the engine's assessment of a sacrifice.
 export function moveInsight(fen,line=[]){
  const before=new Chess(fen),board=new Chess(fen);let move;
@@ -38,6 +53,15 @@ export function moveInsight(fen,line=[]){
   if(loose.length&&!board.isGameOver()){
    const capture=loose[0];parts.push(`${opponent}’s ${names[capture.piece]} on ${capture.from} can capture ${player}’s undefended ${names[capture.captured]} on ${capture.to} with ${capture.san}. Follow the continuation to see whether ${player} gets enough in return.`);
    arrows.length=0;add(capture.from,capture.to,'risk');
+  }
+  if(move.piece==='n'&&targets.length<2&&!board.isCheck()&&!board.isGameOver()&&!loose.length){
+   const threat=forkThreat(ownTurn,move.to,side);
+   if(threat){
+    const {jump,pair,capture}=threat;
+    parts.push(`${move.san} sets up a potential fork with ${jump.san}: the knight would attack the ${names[pair[0].type]} on ${pair[0].square} and the ${names[pair[1].type]} on ${pair[1].square}.`);
+    parts.push(capture?`${opponent} can respond first. If ${jump.san} is played in this setup, ${capture.san} can capture the knight, so this is not a forced win.`:`${opponent} can respond before the fork happens; this is a threat, not a forced continuation.`);
+    arrows.length=0;add(move.to,jump.to,'threat');for(const target of pair)add(jump.to,target.square,'threat');
+   }
   }
   if(!parts.length){
    if(move.flags.includes('k')||move.flags.includes('q'))parts.push(`${move.san} castles: ${player}’s king moves away from the center and rook comes into play.`);
