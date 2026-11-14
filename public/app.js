@@ -322,7 +322,7 @@ function explorationMovePanel(game,v){
 }
 function reviewCompareAction(alternative,busy){
  const move=alternative?.move;
- return `<div class="review-alternative"><span>${move?'Selected move':'Select a move'}<strong>${move?`${move.color==='w'?'White':'Black'} · ${move.moveNumber}. ${escape(move.san)}`:'Then compare it with the engine'}</strong></span><button class="primary" id="review-best-instead" ${!move||busy?'disabled':''} title="Compare the selected move with the engine’s best move">Compare move against best move</button></div>`;
+ return `<div class="review-alternative"><span>${move?'Selected move':'Select a move'}<strong>${move?`${move.color==='w'?'White':'Black'} · ${move.moveNumber}. ${escape(move.san)}`:'Then compare it with the engine'}</strong></span><button class="primary" id="review-best-instead" ${!move||busy?'disabled':''} title="Compare the selected move with the engine’s best move">Compare against best move</button></div>`;
 }
 
 function paintOption(button,on){
